@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f5f1">
+  <title>Garaje | Forzar valor</title>
+  <link rel="stylesheet" href="estilos.css?v=2">
+  <script src="app.js?v=10" defer></script>
+</head>
+<body data-pagina="control">
+  <header class="barra">
+    <a class="marca" href="index.html" aria-label="Garaje, monitor">
+      <span class="marca-icono" aria-hidden="true">G</span>
+      <span><strong>GARAJE</strong><small>CONTROL DE ACCESO</small></span>
+    </a>
+    <span class="etiqueta-plc">S7-1500 <span class="punto-plc"></span></span>
+  </header>
+
+  <main class="contenedor contenedor-control">
+    <div class="encabezado">
+      <div><p class="sobrelinea">PANEL DE PRUEBAS</p><h1>Forzar ocupación</h1><p class="subtitulo">Envía un valor manual a Node-RED</p></div>
+      <a class="boton-contextual boton-volver" href="index.html"><span aria-hidden="true">←</span>Volver al monitor</a>
+    </div>
+
+    <section class="control-layout">
+      <div class="panel control-panel">
+        <div class="cabecera-seccion">
+          <div><p class="sobrelinea">ORDEN MANUAL</p><h2>Seleccionar plazas ocupadas</h2></div>
+          <span class="estado-conexion" id="estado-conexion"><span class="punto-estado"></span><span id="texto-conexion">Desconectado</span></span>
+        </div>
+
+        <form id="form-forzar">
+          <label class="etiqueta-campo" for="valor-forzado">Valor que se enviará</label>
+          <div class="selector-valor">
+            <input id="valor-forzado" type="number" min="0" max="100" step="1" value="73" required>
+          </div>
+          <input class="deslizador" id="deslizador" type="range" min="0" max="100" step="1" value="73" aria-label="Seleccionar número de plazas ocupadas">
+          <div class="extremos"><span>0 · Garaje vacío</span><span>100 · Completo</span></div>
+        </form>
+        <button class="boton-reset" id="boton-reset" type="button"><span class="icono-reset" aria-hidden="true">↺</span><span>Reset a 0</span></button>
+
+        <p class="respuesta-envio" id="respuesta-envio" role="status">El valor se envía automáticamente al cambiarlo.</p>
+      </div>
+
+    </section>
+
+  </main>
+</body>
+</html>

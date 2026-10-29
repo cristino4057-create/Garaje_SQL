@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f5f1">
+  <title>Garaje | Monitor de plazas</title>
+  <link rel="stylesheet" href="estilos.css?v=2">
+  <script src="app.js?v=10" defer></script>
+</head>
+<body data-pagina="monitor">
+  <header class="barra">
+    <a class="marca" href="index.html" aria-label="Garaje, monitor">
+      <span class="marca-icono" aria-hidden="true">G</span>
+      <span><strong>GARAJE</strong><small>CONTROL DE ACCESO</small></span>
+    </a>
+    <span class="etiqueta-plc">S7-1500 <span class="punto-plc"></span></span>
+  </header>
+
+  <main class="contenedor">
+    <div class="encabezado">
+      <div><p class="sobrelinea">ESTADO DEL GARAJE</p><h1>Monitor de plazas</h1><p class="subtitulo">Ocupación y disponibilidad en tiempo real</p></div>
+      <div class="acciones-encabezado"><time class="reloj" id="reloj"></time><a class="boton-contextual boton-forzar" href="control.html"><span aria-hidden="true">↗</span>Forzar valor</a></div>
+    </div>
+
+    <section class="resumen" aria-label="Resumen de ocupación">
+      <div class="ocupacion panel">
+        <p class="titulo-panel"><span class="cuadrado-acento"></span>Plazas ocupadas</p>
+        <div class="numero-linea"><span class="numero" id="ocupadas">--</span><span class="total">/ 100</span></div>
+        <div class="barra-fondo"><div class="barra-valor" id="barra-valor"></div></div>
+        <div class="detalle-ocupacion"><span><strong id="libres">--</strong> libres</span><span id="porcentaje">Esperando datos</span></div>
+      </div>
+
+      <div class="semaforo panel" aria-label="Semáforo de acceso">
+        <div class="luces" aria-hidden="true">
+          <span class="luz verde" id="luz-verde"></span>
+          <span class="luz ambar" id="luz-ambar"></span>
+          <span class="luz roja" id="luz-roja"></span>
+        </div>
+        <div><p class="titulo-panel titulo-claro">Semáforo de acceso</p><p class="estado-semaforo" id="estado-semaforo">Sin datos</p></div>
+      </div>
+    </section>
+
+    <section class="conexion panel" aria-labelledby="titulo-conexion">
+      <div class="cabecera-seccion">
+        <div><p class="sobrelinea">COMUNICACIÓN</p><h2 id="titulo-conexion">Node-RED · WebSocket</h2></div>
+        <span class="estado-conexion" id="estado-conexion"><span class="punto-estado"></span><span id="texto-conexion">Desconectado</span></span>
+      </div>
+      <p class="ayuda">Conexión automática con Node-RED. La ocupación se actualiza al recibir datos.</p>
+    </section>
+
+    <section class="plazas panel" aria-labelledby="titulo-plazas">
+      <div class="cabecera-seccion cabecera-plazas">
+        <div><p class="sobrelinea">DISTRIBUCIÓN</p><h2 id="titulo-plazas">Plazas de aparcamiento</h2></div>
+        <div class="leyenda"><span><i class="muestra libre"></i>Libre</span><span><i class="muestra ocupada"></i>Ocupada</span></div>
+      </div>
+      <div class="rejilla-plazas" id="rejilla-plazas" aria-label="Estado de las 100 plazas"></div>
+      <p class="nota-plazas" id="actualizacion">Sin lectura recibida</p>
+    </section>
+  </main>
+</body>
+</html>

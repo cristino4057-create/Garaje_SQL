@@ -1,0 +1,795 @@
+[
+    {
+        "id": "6d5a2a4e97a84001",
+        "type": "tab",
+        "label": "Garaje WebSocket",
+        "disabled": false,
+        "info": "Prueba de comunicación entre el monitor web y Node-RED. Las órdenes validadas se devuelven como ocupación para probar el recorrido de ida y vuelta sin PLC.",
+        "env": []
+    },
+    {
+        "id": "6d5a2a4e97a84003",
+        "type": "websocket in",
+        "z": "6d5a2a4e97a84001",
+        "name": "Órdenes del monitor web",
+        "server": "6d5a2a4e97a84002",
+        "client": "",
+        "x": 160,
+        "y": 160,
+        "wires": [
+            [
+                "6d5a2a4e97a84004"
+            ]
+        ]
+    },
+    {
+        "id": "6d5a2a4e97a84004",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "Validar y preparar orden PLC",
+        "func": "let orden = msg.payload;\nif (typeof orden === \"string\") {\n    try { orden = JSON.parse(orden); } catch (error) { return null; }\n}\nif (!orden || typeof orden !== \"object\" || Array.isArray(orden)) return null;\n\nif (orden.leer === true) {\n    const ultimoValor = flow.get(\"garaje_ocupadas\");\n    msg.payload = Number.isInteger(ultimoValor) ? ultimoValor : 0;\n    return [null, msg, null, null];\n}\n\nif (orden.reset === true) {\n    msg.topic = \"Reiniciar\";\n    msg.payload = true;\n    return [null, null, null, msg];\n}\n\nif (!Object.prototype.hasOwnProperty.call(orden, \"forzar\")) return null;\nconst valor = Number(orden.forzar);\nif (!Number.isInteger(valor) || valor < 0 || valor > 100) return null;\nif (flow.get(\"garaje_pending_force\")) return null;\nconst timestamp = Date.now();\nconst session = msg._session;\nflow.set(\"garaje_pending_force\", { value: valor, timestamp, stage: \"pv\", session });\nsetTimeout(() => {\n    const pending = flow.get(\"garaje_pending_force\");\n    if (!pending || pending.timestamp !== timestamp) return;\n    flow.set(\"garaje_pending_force\", null);\n    node.send([null, null, { _session: session, payload: JSON.stringify({ error: \"PLC_READBACK_TIMEOUT\" }) }, null]);\n}, 10000);\nmsg.topic = \"PV_Forzado\";\nmsg.payload = valor;\nreturn [msg, null, null, null];",
+        "outputs": 4,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 430,
+        "y": 160,
+        "wires": [
+            [
+                "6d5a2a4e97a84006",
+                "b820000000000001"
+            ],
+            [
+                "6d5a2a4e97a8400c"
+            ],
+            [
+                "b820000000000014"
+            ],
+            [
+                "b820000000000015"
+            ]
+        ]
+    },
+    {
+        "id": "6d5a2a4e97a84006",
+        "type": "debug",
+        "z": "6d5a2a4e97a84001",
+        "name": "Orden validada (pendiente PLC)",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 750,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "6d5a2a4e97a8400c",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "Publicar ocupación y salidas PLC",
+        "func": "delete msg._session;\nlet valor = Number(msg.payload);\nif (!Number.isInteger(valor)) {\n    valor = flow.get(\"garaje_ocupadas\");\n}\nif (!Number.isInteger(valor)) valor = 0;\nconst salida = { ocupadas: valor };\nconst luces = [\"verde\", \"ambar\", \"rojo\"];\nconst completas = luces.every(nombre => typeof flow.get(\"garaje_luz_\" + nombre) === \"boolean\");\nif (completas) {\n    for (const nombre of luces) salida[nombre] = flow.get(\"garaje_luz_\" + nombre);\n}\nmsg.payload = JSON.stringify(salida);\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 300,
+        "wires": [
+            [
+                "6d5a2a4e97a84009",
+                "6d5a2a4e97a8400a"
+            ]
+        ]
+    },
+    {
+        "id": "6d5a2a4e97a84007",
+        "type": "link in",
+        "z": "6d5a2a4e97a84001",
+        "name": "Lectura de ocupadas desde S7 In",
+        "links": [],
+        "x": 160,
+        "y": 320,
+        "wires": [
+            [
+                "6d5a2a4e97a84008"
+            ]
+        ]
+    },
+    {
+        "id": "6d5a2a4e97a84008",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "Preparar lectura para monitor",
+        "func": "let valor = msg.payload;\n\nif (valor && typeof valor === \"object\") {\n    const clave = Object.keys(valor).find(nombre => nombre.toLowerCase() === \"ocupadas\");\n    if (!clave) {\n        return null;\n    }\n    valor = valor[clave];\n}\n\nif (typeof valor === \"string\" && valor.trim() !== \"\") {\n    valor = Number(valor);\n}\n\nif (!Number.isInteger(valor) || valor < 0 || valor > 100) {\n    node.warn(\"Lectura ignorada: la ocupación debe ser un entero entre 0 y 100\");\n    return null;\n}\n\nmsg.payload = JSON.stringify({ ocupadas: valor });\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 480,
+        "y": 360,
+        "wires": [
+            [
+                "6d5a2a4e97a84009",
+                "6d5a2a4e97a8400a"
+            ]
+        ]
+    },
+    {
+        "id": "6d5a2a4e97a84009",
+        "type": "websocket out",
+        "z": "6d5a2a4e97a84001",
+        "name": "Publicar ocupación a monitores",
+        "server": "6d5a2a4e97a84002",
+        "client": "",
+        "x": 950,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "6d5a2a4e97a8400a",
+        "type": "debug",
+        "z": "6d5a2a4e97a84001",
+        "name": "Mensaje publicado al monitor",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 960,
+        "y": 400,
+        "wires": []
+    },
+    {
+        "id": "6d5a2a4e97a8400b",
+        "type": "comment",
+        "z": "6d5a2a4e97a84001",
+        "name": "",
+        "info": "Conexión S7-1500 192.168.0.10, rack 0/slot 1. PV_Forzado INT en DB2,INT2 (TIA offset 2.0). Entrada M100.0 y salida M100.1 cuentan flancos negativos; M100.3 resetea en flanco positivo. Semáforo: M100.4 Verde, M100.5 Ambar, M100.6 Rojo. El forzado escribe PV, verifica readback, luego pulsa M100.7 para LD. WebSocket para las páginas.",
+        "x": 460,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "a710000000000002",
+        "type": "s7 in",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "mode": "single",
+        "variable": "Entra_Vehiculo",
+        "diff": true,
+        "name": "Leer Entra_Vehiculo",
+        "x": 170,
+        "y": 500,
+        "wires": [
+            [
+                "a710000000000003"
+            ]
+        ]
+    },
+    {
+        "id": "a710000000000003",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "Identificar flanco entrada",
+        "func": "msg.topic = \"Entra_Vehiculo\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 500,
+        "wires": [
+            [
+                "a710000000000008"
+            ]
+        ]
+    },
+    {
+        "id": "a710000000000004",
+        "type": "s7 in",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "mode": "single",
+        "variable": "Sale_Vehiculo",
+        "diff": true,
+        "name": "Leer Sale_Vehiculo",
+        "x": 170,
+        "y": 580,
+        "wires": [
+            [
+                "a710000000000005"
+            ]
+        ]
+    },
+    {
+        "id": "a710000000000005",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "Identificar flanco salida",
+        "func": "msg.topic = \"Sale_Vehiculo\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 580,
+        "wires": [
+            [
+                "a710000000000008"
+            ]
+        ]
+    },
+    {
+        "id": "a710000000000006",
+        "type": "s7 in",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "mode": "single",
+        "variable": "Reiniciar",
+        "diff": true,
+        "name": "Leer Reiniciar",
+        "x": 170,
+        "y": 660,
+        "wires": [
+            [
+                "a710000000000007"
+            ]
+        ]
+    },
+    {
+        "id": "a710000000000007",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "Identificar flanco reset",
+        "func": "msg.topic = \"Reiniciar\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 660,
+        "wires": [
+            [
+                "a710000000000008"
+            ]
+        ]
+    },
+    {
+        "id": "a710000000000008",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "Contar flancos y reset",
+        "func": "const signal = msg.topic;\nif (![\"Entra_Vehiculo\", \"Sale_Vehiculo\", \"Reiniciar\"].includes(signal)) return null;\n\nlet raw = msg.payload;\nif (raw && typeof raw === \"object\") {\n    if (Object.prototype.hasOwnProperty.call(raw, signal)) raw = raw[signal];\n    else if (Object.keys(raw).length === 1) raw = Object.values(raw)[0];\n}\nconst active = raw === true || raw === 1 || raw === \"1\" || raw === \"true\";\nconst stateKey = `garaje_sensor_${signal}`;\nconst previous = flow.get(stateKey);\nflow.set(stateKey, active);\n\nlet count = flow.get(\"garaje_ocupadas\");\nif (!Number.isInteger(count)) count = 0;\nconst oldCount = count;\n\nif (previous !== undefined) {\n    if (signal === \"Reiniciar\" && !previous && active) count = 0;\n    if (signal === \"Entra_Vehiculo\" && previous && !active) count += 1;\n    if (signal === \"Sale_Vehiculo\" && previous && !active) count -= 1;\n}\n\ncount = Math.max(0, Math.min(100, count));\nif (count === oldCount) return null;\nflow.set(\"garaje_ocupadas\", count);\nmsg.topic = \"Ocupadas\";\nmsg.payload = count;\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 740,
+        "y": 600,
+        "wires": [
+            [
+                "6d5a2a4e97a8400c",
+                "a710000000000009"
+            ]
+        ]
+    },
+    {
+        "id": "a710000000000009",
+        "type": "debug",
+        "z": "6d5a2a4e97a84001",
+        "name": "Contador PLC (solo lectura)",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1000,
+        "y": 620,
+        "wires": []
+    },
+    {
+        "id": "b820000000000001",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "Preparar PV, pulso LD y respuesta",
+        "func": "const valor = Number(msg.payload);\nif (!Number.isInteger(valor) || valor < 0 || valor > 100) return null;\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 460,
+        "y": 240,
+        "wires": [
+            [
+                "b820000000000002"
+            ]
+        ]
+    },
+    {
+        "id": "b820000000000002",
+        "type": "s7 out",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "variable": "PV_Forzado",
+        "name": "Escribir PV DB2,INT1",
+        "x": 820,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "b820000000000004",
+        "type": "delay",
+        "z": "6d5a2a4e97a84001",
+        "name": "Esperar escritura PV (300 ms)",
+        "pauseType": "delay",
+        "timeout": "0.3",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 760,
+        "y": 240,
+        "wires": [
+            [
+                "b820000000000005"
+            ]
+        ]
+    },
+    {
+        "id": "b820000000000005",
+        "type": "trigger",
+        "z": "6d5a2a4e97a84001",
+        "name": "Pulso Forzar_valor (500 ms)",
+        "op1": "true",
+        "op2": "false",
+        "op1type": "bool",
+        "op2type": "bool",
+        "duration": "500",
+        "extend": false,
+        "overrideDelay": false,
+        "units": "ms",
+        "reset": "",
+        "bytopic": "all",
+        "topic": "topic",
+        "outputs": 1,
+        "x": 1040,
+        "y": 240,
+        "wires": [
+            [
+                "b820000000000003"
+            ]
+        ]
+    },
+    {
+        "id": "b820000000000003",
+        "type": "s7 out",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "variable": "Forzar_valor",
+        "name": "Pulsar LD M100.7",
+        "x": 1310,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "b820000000000008",
+        "type": "s7 in",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "mode": "single",
+        "variable": "Verde",
+        "diff": true,
+        "name": "Leer salida Verde",
+        "x": 160,
+        "y": 420,
+        "wires": [
+            [
+                "b82000000000000b"
+            ]
+        ]
+    },
+    {
+        "id": "b820000000000009",
+        "type": "s7 in",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "mode": "single",
+        "variable": "Ambar",
+        "diff": true,
+        "name": "Leer salida Ambar",
+        "x": 160,
+        "y": 500,
+        "wires": [
+            [
+                "b82000000000000b"
+            ]
+        ]
+    },
+    {
+        "id": "b82000000000000a",
+        "type": "s7 in",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "mode": "single",
+        "variable": "Rojo",
+        "diff": true,
+        "name": "Leer salida Rojo",
+        "x": 160,
+        "y": 580,
+        "wires": [
+            [
+                "b82000000000000b"
+            ]
+        ]
+    },
+    {
+        "id": "b82000000000000b",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "Publicar estados reales del semáforo",
+        "func": "const nombre = String(msg.topic || \"\").toLowerCase();\nconst clave = { verde: \"verde\", ambar: \"ambar\", rojo: \"rojo\" }[nombre];\nif (!clave) return null;\nconst valor = msg.payload === true || msg.payload === 1 || msg.payload === \"1\" || msg.payload === \"true\";\nflow.set(\"garaje_luz_\" + clave, valor);\nconst luces = [\"verde\", \"ambar\", \"rojo\"];\nif (!luces.every(color => typeof flow.get(\"garaje_luz_\" + color) === \"boolean\")) return null;\nconst ocupadas = flow.get(\"garaje_ocupadas\");\nconst salida = { ocupadas: Number.isInteger(ocupadas) ? ocupadas : 0 };\nfor (const color of luces) salida[color] = flow.get(\"garaje_luz_\" + color);\ndelete msg._session;\nmsg.payload = JSON.stringify(salida);\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 470,
+        "y": 420,
+        "wires": [
+            [
+                "6d5a2a4e97a84009",
+                "b82000000000000c"
+            ]
+        ]
+    },
+    {
+        "id": "b82000000000000c",
+        "type": "debug",
+        "z": "6d5a2a4e97a84001",
+        "name": "Salidas semáforo PLC",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 920,
+        "y": 520,
+        "wires": []
+    },
+    {
+        "id": "b820000000000010",
+        "type": "s7 in",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "mode": "single",
+        "variable": "PV_Forzado",
+        "diff": false,
+        "name": "Leer PV_Forzado para confirmar escritura",
+        "x": 160,
+        "y": 760,
+        "wires": [
+            [
+                "b820000000000011"
+            ]
+        ]
+    },
+    {
+        "id": "b820000000000011",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "Confirmar valor leído del PLC",
+        "func": "const pending = flow.get(\"garaje_pending_force\");\nif (!pending || !Number.isInteger(pending.value)) return [null, null];\nif (Date.now() - pending.timestamp > 10000) {\n    flow.set(\"garaje_pending_force\", null);\n    node.warn(\"Forzado cancelado: PV_Forzado no se pudo confirmar desde DB2\");\n    return [null, null];\n}\n\nconst readback = Number(msg.payload);\nif (readback !== pending.value) return [null, null];\n\nif (pending.stage === \"pv\" && Date.now() - pending.timestamp >= 300) {\n    pending.stage = \"ld\";\n    pending.ldAt = Date.now();\n    flow.set(\"garaje_pending_force\", pending);\n    msg.topic = \"Forzar_valor\";\n    msg.payload = true;\n    return [msg, null];\n}\n\nif (pending.stage === \"ld\" && Date.now() - pending.ldAt >= 1000) {\n    flow.set(\"garaje_ocupadas\", pending.value);\n    flow.set(\"garaje_pending_force\", null);\n    delete msg._session;\n    msg.topic = \"Ocupadas\";\n    msg.payload = JSON.stringify({ ocupadas: pending.value, forzado_confirmado: true });\n    return [null, msg];\n}\n\nreturn [null, null];",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 470,
+        "y": 760,
+        "wires": [
+            [
+                "b820000000000004"
+            ],
+            [
+                "6d5a2a4e97a84009",
+                "6d5a2a4e97a8400a"
+            ]
+        ]
+    },
+    {
+        "id": "b820000000000014",
+        "type": "websocket out",
+        "z": "6d5a2a4e97a84001",
+        "name": "Aviso error lectura PLC",
+        "server": "6d5a2a4e97a84002",
+        "client": "",
+        "x": 790,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "b820000000000015",
+        "type": "trigger",
+        "z": "6d5a2a4e97a84001",
+        "name": "Pulso reset M100.3",
+        "op1": "true",
+        "op2": "false",
+        "op1type": "bool",
+        "op2type": "bool",
+        "duration": "1500",
+        "extend": false,
+        "overrideDelay": false,
+        "units": "ms",
+        "reset": "",
+        "bytopic": "all",
+        "topic": "topic",
+        "outputs": 1,
+        "x": 760,
+        "y": 440,
+        "wires": [
+            [
+                "b820000000000016"
+            ]
+        ]
+    },
+    {
+        "id": "b820000000000016",
+        "type": "s7 out",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "variable": "Reiniciar",
+        "name": "Escribir reset Reiniciar M100.3",
+        "x": 1030,
+        "y": 440,
+        "wires": []
+    },
+    {
+        "id": "eb17e2c78a95f994",
+        "type": "function",
+        "z": "6d5a2a4e97a84001",
+        "name": "function 1",
+        "func": "let Ocupacion = msg.payload;\n\nlet tzoffset = (new Date()).getTimezoneOffset()*60000;\nlet Fecha =(new Date(Date.now() - tzoffset)).toISOString().slice(0, -1);\n\nmsg.topic = \"INSERT INTO garaje VALUES('\"+Fecha+\"','\"+Ocupacion+\"')\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 740,
+        "y": 880,
+        "wires": [
+            [
+                "4354ed59b3810798"
+            ]
+        ]
+    },
+    {
+        "id": "4354ed59b3810798",
+        "type": "mysql",
+        "z": "6d5a2a4e97a84001",
+        "mydb": "961c9b63eeb3443e",
+        "name": "DB",
+        "x": 970,
+        "y": 880,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "7f2a42422b8a1c10",
+        "type": "s7 in",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "mode": "single",
+        "variable": "PV_Forzado",
+        "diff": false,
+        "name": "Leer PV_Forzado para confirmar escritura",
+        "x": 180,
+        "y": 880,
+        "wires": [
+            [
+                "c8bca9fa79acf917"
+            ]
+        ]
+    },
+    {
+        "id": "6ef73b2342a06ff7",
+        "type": "s7 in",
+        "z": "6d5a2a4e97a84001",
+        "endpoint": "a710000000000001",
+        "mode": "single",
+        "variable": "Reiniciar",
+        "diff": true,
+        "name": "Leer Reiniciar",
+        "x": 90,
+        "y": 940,
+        "wires": [
+            [
+                "6a59dcefc746d54a"
+            ]
+        ]
+    },
+    {
+        "id": "c8bca9fa79acf917",
+        "type": "rbe",
+        "z": "6d5a2a4e97a84001",
+        "name": "",
+        "func": "rbei",
+        "gap": "",
+        "start": "",
+        "inout": "out",
+        "septopics": true,
+        "property": "payload",
+        "topi": "topic",
+        "x": 470,
+        "y": 880,
+        "wires": [
+            [
+                "eb17e2c78a95f994"
+            ]
+        ]
+    },
+    {
+        "id": "6a59dcefc746d54a",
+        "type": "rbe",
+        "z": "6d5a2a4e97a84001",
+        "name": "",
+        "func": "rbe",
+        "gap": "0",
+        "start": "",
+        "inout": "out",
+        "septopics": true,
+        "property": "payload",
+        "topi": "topic",
+        "x": 310,
+        "y": 940,
+        "wires": [
+            [
+                "1eb1f07f169db8b5"
+            ]
+        ]
+    },
+    {
+        "id": "1eb1f07f169db8b5",
+        "type": "switch",
+        "z": "6d5a2a4e97a84001",
+        "name": "",
+        "property": "payload",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "true"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 510,
+        "y": 940,
+        "wires": [
+            [
+                "eb17e2c78a95f994"
+            ]
+        ]
+    },
+    {
+        "id": "6d5a2a4e97a84002",
+        "type": "websocket-listener",
+        "path": "/ws/garaje",
+        "wholemsg": "false"
+    },
+    {
+        "id": "a710000000000001",
+        "type": "s7 endpoint",
+        "transport": "iso-on-tcp",
+        "address": "192.168.0.10",
+        "port": "102",
+        "rack": "0",
+        "slot": "1",
+        "localtsaphi": "01",
+        "localtsaplo": "00",
+        "remotetsaphi": "01",
+        "remotetsaplo": "00",
+        "connmode": "rack-slot",
+        "adapter": "",
+        "busaddr": 2,
+        "cycletime": "10",
+        "timeout": "3000",
+        "name": "S7-1500 Garaje",
+        "vartable": [
+            {
+                "addr": "M100.0",
+                "name": "Entra_Vehiculo"
+            },
+            {
+                "addr": "M100.1",
+                "name": "Sale_Vehiculo"
+            },
+            {
+                "addr": "M100.2",
+                "name": "Limite_Alcanzado"
+            },
+            {
+                "addr": "M100.3",
+                "name": "Reiniciar"
+            },
+            {
+                "addr": "M100.4",
+                "name": "Verde"
+            },
+            {
+                "addr": "M100.5",
+                "name": "Ambar"
+            },
+            {
+                "addr": "M100.6",
+                "name": "Rojo"
+            },
+            {
+                "addr": "M100.7",
+                "name": "Forzar_valor"
+            },
+            {
+                "addr": "DB2,INT2",
+                "name": "PV_Forzado"
+            }
+        ]
+    },
+    {
+        "id": "961c9b63eeb3443e",
+        "type": "MySQLdatabase",
+        "name": "SQL_Xampp",
+        "host": "127.0.0.2",
+        "port": "3306",
+        "db": "pruebas_db",
+        "tz": "",
+        "charset": "UTF8"
+    },
+    {
+        "id": "cc1b1d5468c8bff3",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-s7": "3.1.3",
+            "node-red-node-mysql": "3.0.3"
+        }
+    }
+]
